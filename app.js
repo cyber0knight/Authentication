@@ -1,4 +1,4 @@
-//jshint esversion:6
+// leve 4 using hashing and salting
 require('dotenv').config();
 const express = require("express");
 const bodyParser = require("body-parser");
@@ -8,7 +8,8 @@ const app = express();
 console.log(process.env.API_KEY);
 
 const mongoose = require('mongoose');
-const md5 = require("md5");
+const dcrypt = require('bcrypt');
+const saltRounds = 10;
 const mongoDB = 'mongodb://localhost:27017/userDB';
 
 
@@ -32,37 +33,41 @@ mongoose
     .then(()=>{
         console.log('MongoDB is connected');
         app.post("/register",function(req,res){
-            const newUser = new User({
-                email : req.body.username,
-                password : md5(req.body.password)
-            });
-            newUser.save()
-                .then(()=>{
-                    console.log('data added to the database');
-                    res.render("secrets");
-                })
-                .catch((err)=>{
-                    console.log(`unable to add: ${err}`);
+            dcrypt.hash(req.body.password, saltRounds, function(err,hash){
+                const newUser = new User({
+                    email : req.body.username,
+                    password : hash
                 });
+                newUser.save()
+                    .then(()=>{
+                        console.log('data added to the database');
+                        res.render("secrets");
+                    })
+                    .catch((err)=>{
+                        console.log(`unable to add: ${err}`);
+                    });
+            });
         });
         
         app.post("/login", function(req, res) {
             const username = req.body.username;
-            const password = md5(req.body.password);
+            const password = req.body.password;
             console.log(req.body);
             console.log("yes");
         
             User.findOne({ email: username })
                 .then(function(foundUser) {
                     if (foundUser) {
-                        if (foundUser.password === password) {
-                            res.render("secrets");
-                        } 
-                        else {
-                            // Incorrect password
-                            res.send("Incorrect password"+foundUser.password + password);
-                        }
-                    } 
+                            dcrypt.compare(req.body.password,foundUser.password, function(err,result){
+                                if(result === true){
+                                    res.render("secrets");
+                                }
+                                else {
+                                    // Incorrect password
+                                    res.send("Incorrect password"+foundUser.password + password);
+                                }
+                            }); 
+                    }
                     else {
                         // User not found
                         res.send("User not found");
@@ -77,11 +82,16 @@ mongoose
             res.render("home")
         });
         app.get("/register",function(req,res){
-            res.render("register");
+            res.render("register" );
         });
         
         app.get("/login",function(req,res){
             res.render("login");
+        });
+
+        app.get("/secrets",function(req,res){
+            res.render("secrets");
+            console.log("hello");
         });
     
         app.listen(3000,function(){
